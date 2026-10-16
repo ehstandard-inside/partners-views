@@ -1,7 +1,13 @@
-import './globals.css'
-import { Inter } from 'next/font/google'
+//import 'antd/dist/antd.css';
+import './globals.css';
+import { Poppins } from 'next/font/google'
+import AntdProvider from './AntdProvider';
 
-const inter = Inter({ subsets: ['latin'] })
+const poppins = Poppins({ 
+  weight: ['400', '500', '600', '700'],
+  subsets: ['latin'],
+  display: 'swap',
+})
 
 export const metadata = {
   title: 'Create Next App',
@@ -11,7 +17,11 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={poppins.className}>
+        <AntdProvider>
+          {children}
+        </AntdProvider>
+      </body>
     </html>
   )
 }
