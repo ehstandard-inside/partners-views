@@ -4,13 +4,13 @@ import React, { use, useState, useEffect } from 'react';
 import { Typography, Radio, Button, Row, Col, Card, Space, Modal, Empty, Tooltip, Form, Input, Upload, message, Select, Switch, Alert, Spin } from 'antd';
 import { EyeOutlined, DownloadOutlined, FolderOpenOutlined, GlobalOutlined, EditOutlined, UserOutlined, TeamOutlined, UploadOutlined, FolderFilled, DeleteOutlined } from '@ant-design/icons';
 
-// Importaciones para la miniatura
-import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
-
-// Configuración del worker de PDF
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+// Componentes
+import BuscadorGlobal from '@/components/BuscadorGlobal';
+import SelectorVisibilidad from '@/components/SelectorVisibilidad';
+import CardDocumento from './components/CardDocumento';
+import CardCarpeta from './components/CardCarpeta';
+import ModalNuevoDocumento from './components/ModalNuevoDocumento';
+import ModalNuevaCarpeta from './components/ModalNuevaCarpeta';
 
 const { Title, Text } = Typography;
 
@@ -425,99 +425,6 @@ export default function VistaDocumentos() {
         cargarDatosBD();
     }, []); // estos corchetes indincan que se ejecuta una sola vez al abrir la pagina
 
-    // Selector de visibilidad
-    const SelectorVisibilidad = ({ estadoInicial = 'publica', onChange }) => {
-        const [activo, setActivo] = useState(estadoInicial);
-        const [hover, setHover] = useState(false);
-
-        const opciones = [
-            { id: 'publica', label: 'Público', icono: <GlobalOutlined />, color: '#52c41a' }, 
-            { id: 'interna', label: 'Privado (Organización)', icono: <TeamOutlined />, color: '#1890ff' }, 
-            { id: 'privada', label: 'Solo creador', icono: <UserOutlined />, color: '#ff4d4f' },
-        ];
-
-        const opcionActiva = opciones.find(opt => opt.id === activo);
-
-        return (
-            <div
-                onMouseEnter={() => setHover(true)}
-                onMouseLeave={() => setHover(false)}
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    backgroundColor: '#fff',
-                    border: '1px solid #d9d9d9',
-                    borderRadius: '32px', // Borde completamente redondeado
-                    height: '32px', // Altura estándar para centrado perfecto
-                    width: hover ? '96px' : '32px', // Un poco más ancho para dar respiro al texto
-                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    overflow: 'hidden',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    boxShadow: hover ? '0 2px 8px rgba(0,0,0,0.09)' : 'none',
-                    boxSizing: 'border-box'
-                }}
-            >
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    opacity: hover ? 1 : 0,
-                    transition: 'opacity 0.2s ease',
-                    transitionDelay: hover ? '0.1s' : '0s',
-                    position: 'absolute',
-                    right: '30px',
-                    paddingLeft: '12px',
-                    whiteSpace: 'nowrap',
-                }}>
-                    {opciones.filter(opt => opt.id !== activo).map(opt => (
-                        <div
-                            key={opt.id}
-                            onClick={() => {
-                                setActivo(opt.id);
-                                if (onChange) onChange(opt.id);
-                                setHover(false); 
-                            }}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                padding: '0 10px',
-                                fontSize: '13px',
-                                color: '#595959',
-                                transition: 'color 0.2s',
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.color = opt.color}
-                            onMouseOut={(e) => e.currentTarget.style.color = '#595959'}
-                        >
-                            <Tooltip title={opt.label}>
-                                {opt.icono}
-                            </Tooltip>
-                        </div>
-                    ))}
-                </div>
-
-                <div style={{
-                    minWidth: '30px',
-                    height: '30px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: opcionActiva.color,
-                    backgroundColor: '#fff',
-                    zIndex: 2,
-                    borderRadius: '50%',
-                    fontSize: '16px'
-                }}>
-                    <Tooltip title={opcionActiva.label}>
-                        {opcionActiva.icono}
-                    </Tooltip>
-                    
-                </div>
-            </div>
-        );
-    };
-
     return (
         <div style={{ padding: '32px', backgroundColor: '#f4f6f8', minHeight: '100vh' }}>
         
@@ -561,21 +468,9 @@ export default function VistaDocumentos() {
                     </Radio.Button>
                 </Radio.Group>
 
-                <Input.Search 
+                <BuscadorGlobal 
                     placeholder="Buscar por nombre o tipo..." 
-                    allowClear 
-                    size="large"
-                    onSearch={(value) => setTextoBusqueda(value)}
-                    onChange={(e) => {
-                        if (e.target.value === '') {
-                            setTextoBusqueda('');
-                        }
-                    }}
-                    style={{
-                        maxWidth: '600px',
-                        width: '100%',
-                        borderRadius: '8px'
-                    }}
+                    onBuscar={setTextoBusqueda} 
                 />
 
                 <Space size="middle">
@@ -692,27 +587,12 @@ export default function VistaDocumentos() {
                                     <Row gutter={[16, 16]}>
                                         {carpetasFiltradas.map((carpeta) => (
                                             <Col xs={24} sm={12} md={8} lg={6} key={carpeta.id}>
-                                                <div 
-                                                    className="carpeta-card" 
-                                                    onClick={() => setCarpetaActual(carpeta.id)}
-                                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                                                >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
-                                                        <FolderFilled style={{ fontSize: '24px', color: carpeta.color || '#E0720A' }} />
-                                                        <Text style={{ fontWeight: 500, fontSize: '14px', color: '#1a1a24' }} ellipsis>
-                                                            {carpeta.nombre}
-                                                        </Text>
-                                                    </div>
-                                                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                        <Tooltip title='Editar'>
-                                                            <EditOutlined className='hover-icon' onClick={(e) => abrirEditarCarpeta(carpeta, e)} />
-                                                        </Tooltip>
-                                                        <Tooltip title='Eliminar'>
-                                                            <DeleteOutlined className='hover-icon' onClick={(e) => eliminarCarpeta(carpeta.id, e)} style={{ color: '#ff4d4f' }} />
-                                                        </Tooltip>
-                                                        <SelectorVisibilidad estadoInicial={carpeta.visibilidad || 'interna'} />
-                                                    </div>
-                                                </div>
+                                                <CardCarpeta
+                                                    carpeta={carpeta}
+                                                    onClick={setCarpetaActual}
+                                                    onEditar={abrirEditarCarpeta}
+                                                    onEliminar={eliminarCarpeta}
+                                                />
                                             </Col>
                                         ))}
                                     </Row>
@@ -749,41 +629,13 @@ export default function VistaDocumentos() {
                                                     transform: idsAnimando.includes(doc.id) ? 'scale(0.8)' : 'scale(1)',
                                                 }}
                                             >
-                                                <Card
-                                                    style={{ width: '100%', borderRadius: '16px', borderColor: '#f0f0f0' }}
-                                                    bodyStyle={{ padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
-                                                >
-                                                    <div style={{
-                                                        height: '160px', width: '100%', overflow: 'hidden', display: 'flex',
-                                                        justifyContent: 'center', marginBottom: '16px', backgroundColor: '#fafafa', borderRadius: '8px'
-                                                    }}>
-                                                        <Document file={doc.url} loading="Cargando miniatura...">
-                                                            <Page pageNumber={1} height={160} renderTextLayer={false} renderAnnotationLayer={false} />
-                                                        </Document>
-                                                    </div>
-                
-                                                    <Title level={5} style={{ margin: 0, fontWeight: 700, color: '#1a1a24', textAlign: 'center' }}>
-                                                        {doc.titulo}
-                                                    </Title>
-                                                    <Text type="secondary" style={{ fontSize: '12px', marginTop: '4px', marginBottom: '32px', fontWeight: 500 }}>
-                                                        {doc.formato}
-                                                    </Text>
-                
-                                                    <Space size="large" style={{ fontSize: '18px', color: '#a0a0a0' }}>
-                                                        <Tooltip title="Editar">
-                                                            <EditOutlined className='hover-icon' onClick={(e) => abrirEditarDocumento(doc, e)} />
-                                                        </Tooltip>
-                                                        <Tooltip title="Ver documento">
-                                                            <EyeOutlined className='hover-icon' onClick={() => abrirModal(doc.url)} style={{ cursor: 'pointer', transition: 'color 0.3s' }} />
-                                                        </Tooltip>
-                                                        <Tooltip title="Descargar">
-                                                            <DownloadOutlined className='hover-icon' onClick={() => descargarDocumento(doc.url, `${doc.titulo}.pdf`)} />
-                                                        </Tooltip>
-                                                        <Tooltip title={doc.activo ? "Archivar" : "Desarchivar"}>
-                                                            <FolderOpenOutlined className='hover-icon' onClick={() => archiveDocument(doc.id)} />
-                                                        </Tooltip>
-                                                    </Space>
-                                                </Card>
+                                                <CardDocumento
+                                                    doc={doc}
+                                                    onEditar={abrirEditarDocumento}
+                                                    onVer={abrirModal}
+                                                    onDescargar={descargarDocumento}
+                                                    onArchivar={archiveDocument}
+                                                />
                                             </Col>
                                         ))}
                                     </Row>
@@ -794,224 +646,21 @@ export default function VistaDocumentos() {
                 )}
             </div>
             {/* Modal para subir un nuevo documento */}
-            <Modal
-                open={isModalSubidaOpen}
-                title={
-                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#000000' }}>
-                        Subir nuevo documento
-                    </span>
-                }
-                onCancel={() => {
-                    setIsModalSubidaOpen(false);
-                    form.resetFields();
-                }}
-                footer={null}
-                centered
-                width={600}
-            >
-                {/* Decirle al user en donde va a guardar el archivo, solo como indicativo */}
-                {carpetaActual !== null && (
-                    <Alert
-                    style={{ borderRadius: '8px' }}
-                        message={
-                            <span>
-                                Este documento se guardará dentro de la carpeta: <strong>{carpetas.find(c => c.id === carpetaActual)?.nombre}</strong>
-                            </span>
-                        }
-                    />
-                )}
-                <Form
-                    form={form}
-                    layout="vertical"
+                <ModalNuevoDocumento
+                    isOpen={isModalSubidaOpen}
+                    onClose={() => { setIsModalSubidaOpen(false); form.resetFields(); }}
                     onFinish={onFinishSubida}
-                    // Valores por defecto al abrir el formulario
-                    initialValues={{ descargable: true }}
-                    style={{ paddingTop: '16px' }}
-                >
-                    <Form.Item
-                        name="nombre"
-                        label="Nombre del documento"
-                        rules={[{ required: true, message: 'El nombre es obligatorio' }]}
-                    >
-                        <Input placeholder="Ej. Reglamento interno 2026" />
-                    </Form.Item>
-
-                    <Form.Item
-                        name="descripcion"
-                        label="Descripción"
-                    >
-                        <Input.TextArea rows={3} placeholder="Breve descripción del contenido..." />
-                    </Form.Item>
-
-                    <Row gutter={16}>
-                        <Col span={12}>
-                            <Form.Item name="categoria_id" label="Categoría">
-                                <Select placeholder="Selecciona departamento">
-                                    <Select.Option value={1}>Recursos Humanos</Select.Option>
-                                    <Select.Option value={2}>Operaciones</Select.Option>
-                                    <Select.Option value={3}>Consultoría</Select.Option>
-                                    <Select.Option value={4}>Administración</Select.Option>
-                                    <Select.Option value={5}>EHSmart</Select.Option>
-                                    <Select.Option value={6}>Soporte TI</Select.Option>
-                                    <Select.Option value={7}>Branding</Select.Option>
-                                    <Select.Option value={8}>Marketing y Ventas</Select.Option>
-                                </Select>
-                            </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                            <Form.Item name="tipo_id" label="Tipo de documento">
-                                <Select placeholder="Selecciona tipo">
-                                    <Select.Option value="Manual">Manual</Select.Option>
-                                    <Select.Option value="Material de apoyo">Material de apoyo</Select.Option>
-                                    <Select.Option value="Plantilla">Plantilla</Select.Option>
-                                    <Select.Option value="Política">Política</Select.Option>
-                                    <Select.Option value="Procedimiento">Procedimiento</Select.Option>
-                                    <Select.Option value="Registro">Registro</Select.Option>
-                                    <Select.Option value="Reglamento">Reglamento</Select.Option>
-                                </Select>
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Row gutter={16} align="middle" style={{ marginBottom: '24px' }}>
-                        <Col span={12}>
-                            <Form.Item
-                                name="archivo"
-                                label="Archivo"
-                                valuePropName='fileList'
-                                getValueFromEvent={(e) => {
-                                    if (Array.isArray(e)) { return e; }
-                                    return e?.fileList;
-                                }}
-                                rules={[{ required: true, message: 'Es necesario adjuntar un archivo' }]}
-                                style={{ marginBottom: 0 }}
-                            >
-                                <Upload beforeUpload={() => false} maxCount={1}>
-                                    <Button icon={<UploadOutlined />}>Seleccionar archivo</Button>
-                                </Upload>
-                            </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                            {/* El atributo valuePropName="checked" es obligatorio en Antd cuando usas un Switch o Checkbox dentro de un Form.Item */}
-                            <Form.Item 
-                                name="descargable" 
-                                label="¿Permitir descarga?" 
-                                valuePropName="checked"
-                                style={{ marginBottom: 0 }}
-                            >
-                                <Switch />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-
-                    <Form.Item style={{ textAlign: 'right', marginTop: '32px', marginBottom: 0 }}>
-                        <Button 
-                            onClick={() => {
-                                setIsModalSubidaOpen(false);
-                                form.resetFields();
-                            }} 
-                            style={{ marginRight: '16px' }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button 
-                            type="primary" 
-                            htmlType="submit"
-                        >
-                            Guardar Documento
-                        </Button>
-                    </Form.Item>
-                </Form>
-            </Modal>
-
+                    form={form}
+                    nombreCarpetaActual={carpetaActual !== null ? carpetas.find(c => c.id === carpetaActual)?.nombre : null}
+                />
             {/* Modal apra crear carpeta */}
-            <Modal
-                open={isModalCarpetaOpen}
-                title={
-                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#000000' }}>
-                        {carpetaEdicionId !== null ? 'Editar carpeta' : 'Crear nueva carpeta'}
-                    </span>
-                }
-                onCancel={() => {
-                    setIsModalCarpetaOpen(false);
-                    setCarpetaEdicionId(null);
-                    formCarpeta.resetFields();
-                }}
-                afterClose={() => {
-                    formCarpeta.resetFields();
-                    setCarpetaEdicionId(null);
-                }}
-                footer={null}
-                centered
-                width={400}
-            >
-                <Form
-                    form={formCarpeta}
-                    layout="vertical"
+                <ModalNuevaCarpeta
+                    isOpen={isModalCarpetaOpen}
+                    onClose={() => { setIsModalCarpetaOpen(false); setCarpetaEdicionId(null); form.resetFields(); }}
                     onFinish={onFinishCarpeta}
-                >
-                    <Form.Item
-                        name="nombre"
-                        label="Nombre de la carpeta"
-                        rules={[{ required: true, message: 'Por favor ingresa un nombre para la carpeta' }]}
-                    >
-                        <Input placeholder="Ej. Contabilidad 2026" />
-                    </Form.Item>
-                    <Form.Item
-                        name="visibilidad"
-                        label="Nivel de acceso"
-                        initialValue="interna"
-                    >
-                        <Select>
-                            <Select.Option value="publica">Pública (Acceso externo e interno)</Select.Option>
-                            <Select.Option value="interna">Interna (Solo organización)</Select.Option>
-                            <Select.Option value="privada">Privada (Solo creador)</Select.Option>
-                        </Select>
-                    </Form.Item>
-                    <Form.Item
-                        name="color"
-                        label="Color de la carpeta"
-                        initialValue="#E0720A" // Naranja por defecto
-                    >
-                        <Select>
-                            <Select.Option value="#E0720A">
-                                <Space><span style={{display: 'inline-block', width: 12, height: 12, borderRadius: '50%', backgroundColor: '#E0720A'}}></span> Naranja Corporativo</Space>
-                            </Select.Option>
-                            <Select.Option value="#1890ff">
-                                <Space><span style={{display: 'inline-block', width: 12, height: 12, borderRadius: '50%', backgroundColor: '#1890ff'}}></span> Azul</Space>
-                            </Select.Option>
-                            <Select.Option value="#52c41a">
-                                <Space><span style={{display: 'inline-block', width: 12, height: 12, borderRadius: '50%', backgroundColor: '#52c41a'}}></span> Verde</Space>
-                            </Select.Option>
-                            <Select.Option value="#722ed1">
-                                <Space><span style={{display: 'inline-block', width: 12, height: 12, borderRadius: '50%', backgroundColor: '#722ed1'}}></span> Púrpura</Space>
-                            </Select.Option>
-                            <Select.Option value="#eb2f96">
-                                <Space><span style={{display: 'inline-block', width: 12, height: 12, borderRadius: '50%', backgroundColor: '#eb2f96'}}></span> Rosa</Space>
-                            </Select.Option>
-                        </Select>
-                    </Form.Item>
-
-                    <Form.Item style={{ textAlign: 'right', marginTop: '32px', marginBottom: 0 }}>
-                        <Button 
-                            onClick={() => {
-                                setIsModalCarpetaOpen(false)
-                                setCarpetaEdicionId(null);
-                                formCarpeta.resetFields();
-                            }}
-                            style={{ marginRight: '16px' }}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button 
-                            type="primary" 
-                            htmlType="submit" 
-                        >
-                            {carpetaEdicionId !== null ? 'Guardar cambios' : 'Crear carpeta'}
-                        </Button>
-                    </Form.Item>
-                </Form>
-            </Modal>
+                    form={formCarpeta}
+                    isEditing={carpetaEdicionId !== null}
+                />
             {/* Modal de visualizacion de PDF */}
             <Modal
                 title="Visor de Documento"
