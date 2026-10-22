@@ -2,11 +2,10 @@
 
 import React, { use, useState, useEffect } from 'react';
 import { Typography, Radio, Button, Row, Col, Card, Space, Modal, Empty, Tooltip, Form, Input, Upload, message, Select, Switch, Alert, Spin } from 'antd';
-import { EyeOutlined, DownloadOutlined, FolderOpenOutlined, GlobalOutlined, EditOutlined, UserOutlined, TeamOutlined, UploadOutlined, FolderFilled, DeleteOutlined } from '@ant-design/icons';
 
 // Componentes
 import BuscadorGlobal from '@/components/BuscadorGlobal';
-import SelectorVisibilidad from '@/components/SelectorVisibilidad';
+import TabsSegmentados from '@/components/TabsSegmentados';
 import CardDocumento from './components/CardDocumento';
 import CardCarpeta from './components/CardCarpeta';
 import ModalNuevoDocumento from './components/ModalNuevoDocumento';
@@ -433,40 +432,14 @@ export default function VistaDocumentos() {
             </Title>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <Radio.Group 
-                    value={vista} 
-                    onChange={(e) => setVista(e.target.value)}
-                    buttonStyle="solid"
-                >
-                    <Radio.Button 
-                        value="disponibles" 
-                        style={{ 
-                            fontWeight: vista === 'disponibles' ? 600 : 400,
-                            padding: '0 24px',
-                            borderRadius: '8px 0 0 8px',
-                            height: '40px',
-                            display: 'inline-flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center'
-                        }}
-                    >
-                        Disponibles
-                    </Radio.Button>
-                    <Radio.Button
-                        value="archivados"
-                        style={{ 
-                            fontWeight: vista === 'archivados' ? 600 : 400,
-                            padding: '0 24px',
-                            borderRadius: '0 8px 8px 0',
-                            height: '40px',
-                            display: 'inline-flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center'
-                        }}
-                    >
-                        Archivados
-                    </Radio.Button>
-                </Radio.Group>
+                <TabsSegmentados
+                    valor={vista}
+                    onChange={setVista}
+                    opciones={[
+                        { key: 'disponibles', label: 'Disponibles' },
+                        { key: 'archivados', label: 'Archivados' },
+                    ]}
+                />
 
                 <BuscadorGlobal 
                     placeholder="Buscar por nombre o tipo..." 
