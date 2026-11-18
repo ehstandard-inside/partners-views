@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Typography, Form, Button, Steps, Card, Space, Divider, Row, Col, Tooltip, Progress } from 'antd';
+import { Typography, Form, Button, Steps, Card, Space, Divider, Row, Col, Tooltip, Progress, message, Tag } from 'antd';
 import FormInformacionBasica from '../components/FormInformacionBasica';
 import {
     BookOutlined,
@@ -14,10 +14,17 @@ import {
     UploadOutlined,
     FormOutlined,
     VideoCameraOutlined,
+    LaptopOutlined,
+    ClockCircleOutlined,
+    FolderOutlined,
+    AimOutlined,
+    SettingOutlined
 } from '@ant-design/icons';
 import FormContenidoRecursos from '../components/FormContenidoRecursos';
+import FormRevisionPublicacion from '../components/FormRevisionPublicacion';
 
 const { Title, Text } = Typography;
+const esEvaluable = (act) => ['examen', 'entregable'].includes(act?.tipo);
 
 export default function NuevoCursoPage() {
     const [form] = Form.useForm();
@@ -25,8 +32,9 @@ export default function NuevoCursoPage() {
 
     // 1. Declaración de estados
     const [pasoActual, setPasoActual] = useState(0);
-    const [pdfTemporalId, setPdfTemporalId] = useState(null);
+    const [pdfTemporalIds, setPdfTemporalIds] = useState(null);
     const [diapositivasGeneradas, setDiapositivasGeneradas] = useState([]);
+    const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
 
     const imagenPortadaCurso = Form.useWatch('imagen', form)
     const insigniaCurso = Form.useWatch('insignia', form)
@@ -43,30 +51,144 @@ export default function NuevoCursoPage() {
 
     const pasos = [
         { title: 'Informacion basica' },
-        { title: 'Material base' },
-        { title: 'Configurar actividades' },
+        { title: 'Estructura del curso' },
         { title:  'Publicacion' }
     ]
 
     const pasosVerticales = [
         { title: 'Información básica', description: 'Datos generales del curso' },
-        { title: 'Contenido y recursos', description: 'Secciones, materiales y actividades' },
-        { title: 'Configuración', description: 'Requisitos, evaluaciones y más' },
+        { title: 'Configuración y contenido', description: 'Secciones, actividades y configuración' },
         { title: 'Revisión y publicación', description: 'Verifica la información antes de publicar' }
     ];
 
+    // estado para guardar la lista de catalogos que alimentan el form desde base de datos
+    const [catalogos, setCatalogos] = useState({
+        modalidades: [],
+        categorias: [],
+        objetivos: [],
+        areas_tematicas: [],
+        tipos_agente: []
+    });
+
+    useEffect(() => {
+        const cargarCatalogos = async () => {
+            try {
+                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/cursos/api/catalogos-cursos`);
+                if(response.ok) {
+                    const data = await response.json();
+                    setCatalogos(data);
+                } else {
+                    message.error("Error al cargar los catálogos del servidor.");
+                }
+            } catch (error) {
+                console.error("Error de conexion:", error)
+            }   finally{
+                setCargandoCatalogos(false);
+            }
+        };
+
+        cargarCatalogos();
+    }, []); // los corchetes indican que solo se ejecuta una unica vez
+
+    const validarActividadesCompletas = () => {
+        /* sino sube pdf y quiere continuar no se podra */
+        if(diapositivasGeneradas.length === 0) {
+            message.warning('Debes subir un archivo PDF para poder continuar');
+            return false;
+        }
+
+        /* validar si una diapositiva esta suelta o no, asi como las de las secciones */
+        let todasLasActividades = [];
+        const idsExtrasAgrupadas = new Set();
+        let haySueltas = false;
+
+        diapositivasGeneradas.forEach(item => {
+            if(item.isSeccion) {
+                /* si es una seccion, validamos que no este vacia */
+                if(!item.actividades || item.actividades.length === 0) {
+                    message.error(`La sección "${item.titulo}" está vacía. Agrégale contenido o elíminala.`)
+                    return false;
+                }
+
+                /* mapeamos dentro de la seccion las diapositivas hijas de la actividad de lectura */
+                item.actividades.forEach(act => {
+                    if(act.tipo === 'lectura' && act.config?.paginasExtras) {
+                        act.config?.paginasExtras.forEach(id => idsExtrasAgrupadas.add(id));
+                    }
+                    todasLasActividades.push({ ...act, origen: `la sección "${item.titulo}"` });
+                });
+            } else {
+                /* si estan sueltas en la raiz las pasamos a la lista para revisarlas por igual */
+                haySueltas = true;
+                todasLasActividades.push({ ...item, origen: 'la lista principal'});
+
+            }
+        });
+
+        if(haySueltas) {
+            message.error('No puedes publicar si hay diapositivas sueltas. Arrástralas dentro de una sección.')
+            return false;
+        }
+
+        /* array para guardar solo las que tienen puntos */
+        let actividadesEvaluables = [];
+
+        /* revisamos cada actividad que ya este configurada */
+        for(const act of todasLasActividades) {
+            /* si la diapo es extra, la ignoramos */
+            if(!idsExtrasAgrupadas.has(act.id)) {
+                actividadesEvaluables.push(act); // las guardamos para sumar los puntos
+                if(!act.config?.configurado) {
+                    message.error(`Falta configurar la actividad: "${act.titulo || 'Diapositiva ' + act.diapo}" en ${act.origen}.`);
+                    return false;
+                }
+            }
+        }
+
+        // filtramos solo las actividades evaluables, de que examen y entregas
+        const evaluables = actividadesEvaluables.filter(esEvaluable);
+        const noHayEvaluables = evaluables.length === 0;
+
+        // sumamos los puntos
+        const puntosTotales = evaluables.reduce((suma, act) => suma + (Number(act.ponderacion) || 0), 0);
+
+        if (!noHayEvaluables && puntosTotales !== 100) {
+            message.error(`La suma de exámenes y entregas es ${puntosTotales} pts. Debe ser exactamente 100 pts.`);
+            return false;
+        }
+
+        const hayEvaluablesSinPuntaje = evaluables.some(act => !act.ponderacion || Number(act.ponderacion) <= 0);
+        if (hayEvaluablesSinPuntaje) {
+            message.error('Todos los exámenes y actividades de entrega deben tener un puntaje mayor a 0.');
+            return false;
+        }
+
+        return true; /* si llegamos a este pnto es que todo esta confugurado */
+    }
+
     // funciones para navegar entre los pasos
+    const CAMPOS_PASO_1 = [
+        'nombre', 'categoria_id', 'modalidad_id', 'objetivo_id',
+        'area_tematica_id', 'tipo_agente_id', 'duracion',
+        'calificacion_minima_aprobatoria', 'imagen', 'insignia',
+    ];
     const siguientePaso = async () => {
         if (pasoActual === 0){
             try {
                 // Validmos campos del formulario
-                await form.validateFields();
+                await form.validateFields(CAMPOS_PASO_1);
                 setPasoActual(pasoActual + 1);
             } catch (error) {
                 console.log("Faltan campos requeridos en el Paso 1");
+                message.error('Completa los campos obligatorios.')
+            }
+        } else if (pasoActual == 1) {
+            // validacion del paso 1
+            if (validarActividadesCompletas()) {
+                setPasoActual(pasoActual + 1)
             }
         } else {
-            setPasoActual(pasoActual + 1)
+            setPasoActual(pasoActual + 1);
         }
     }
     const pasoAnterior = () => setPasoActual(pasoActual - 1);
@@ -83,44 +205,56 @@ export default function NuevoCursoPage() {
         switch (pasoActual) {
             case 0:
                 return (
-                    <FormInformacionBasica form={form} />
+                    <FormInformacionBasica
+                        form={form}
+                        catalogos={catalogos}
+                        cargandoCatalogos={cargandoCatalogos}
+                    />
                 );
             case 1:
                 return (
                     <FormContenidoRecursos
                         form={form}
-                        setPdfTemporalId={setPdfTemporalId}
+                        setPdfTemporalIds={setPdfTemporalIds}
                         diapositivasGeneradas={diapositivasGeneradas}
                         setDiapositivasGeneradas={setDiapositivasGeneradas}
                     />
                 );
             case 2:
                 return (
-                    <div style={{ padding: '40px 20px', textAlign: 'center' }}>
-                        <Title level={3}>Paso 3: Constructor de actividades</Title>
-                    </div>
+                    <FormRevisionPublicacion
+                        form={form}
+                        diapositivasGeneradas={diapositivasGeneradas}
+                        urlPrevImagen={urlPrevImagenCurso}
+                        catalogos={catalogos}
+                    />
                 );
             default:
                 return <div>Paso no encontrado</div>;
         }
     };
 
-    /* useEffect(() => {
-        
-    }, []); */
-
     // Funciones manejadoras (handlers)
     const handlePublicarCurso = async () => {
         // extrameos todos los datos con getFieldsValue()
-        const datosBasicos = form.getFieldsValue();
+        const datosBasicos = form.getFieldsValue(true);
 
-        const payloadFinal = {
-            ...datosBasicos,
-            pdf_id: pdfTemporalId,
-            diapositivas: diapositivasGeneradas
-        }
+        const payloadJSON = {
+            curso_metadata: {
+                nombre: datosBasicos.nombre,
+                categoria_id: datosBasicos.categoria_id,
+                modalidad_id: datosBasicos.modalidad_id,
+                objetivo_id: datosBasicos.objetivo_id,
+                area_tematica_id: datosBasicos.area_tematica_id,
+                tipo_agente_id: datosBasicos.tipo_agente_id,
+                duracion: datosBasicos.duracion,
+                calificacion_minima: datosBasicos.calificacion_minima_aprobatoria
+            },
+            pdf_id: pdfTemporalIds,
+            estructura: diapositivasGeneradas
+        };
 
-        console.log("Enviando a servidor: ", payloadFinal);
+        console.log(JSON.stringify(payloadJSON, null, 2));
         // aqui debera ir el fetch para subir el curso xd
     };
 
@@ -188,7 +322,34 @@ export default function NuevoCursoPage() {
                     {/* formulario con pasos */}
                     <div style={{ minHeight: '400px' }}>
                         <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-                            {renderizarContenidoDelPaso()}
+                            {/* PASO 1 */}
+                            <div style={{ display: pasoActual === 0 ? 'block' : 'none' }}>
+                                <FormInformacionBasica
+                                    form={form}
+                                    catalogos={catalogos}
+                                    cargandoCatalogos={cargandoCatalogos}    
+                                />
+                            </div>
+
+                            {/* PASO 2 */}
+                            <div style={{ display: pasoActual === 1 ? 'block' : 'none' }}>
+                                <FormContenidoRecursos
+                                    form={form}
+                                    setPdfTemporalIds={setPdfTemporalIds}
+                                    diapositivasGeneradas={diapositivasGeneradas}
+                                    setDiapositivasGeneradas={setDiapositivasGeneradas}
+                                />
+                            </div>
+
+                            {/* PASO 3 */}
+                            <div style={{ display: pasoActual === 2 ? 'block' : 'none' }}>
+                                <FormRevisionPublicacion
+                                    form={form}
+                                    diapositivasGeneradas={diapositivasGeneradas}
+                                    urlPrevImagen={urlPrevImagenCurso}
+                                    catalogos={catalogos}
+                                />
+                            </div>
                         </div>
                         
                     </div>
@@ -304,8 +465,8 @@ export default function NuevoCursoPage() {
                                 <Text style={{ fontWeight: 700, color: '#1a1a24', fontSize: 16 }}>Tu curso</Text>
                             </Space>
 
-                            {pasoActual === 3 ? (
-                                <Button type="primary" onClick={handlePublicarCurso} block style={{ backgroundColor: '#90C33D', borderColor: '#90C33D', borderRadius: 8, marginBottom: 32, fontWeight: 600 }}>
+                            {pasoActual === 2 ? (
+                                <Button type="primary" onClick={handlePublicarCurso} block style={{ backgroundColor: '#90C33D', borderColor: '#90C33D', borderRadius: 8, marginBottom: 20, fontWeight: 600 }}>
                                     Publicar curso
                                 </Button>
                             ) : (
@@ -338,17 +499,148 @@ export default function NuevoCursoPage() {
                                     />
                                 ))}
                             </Steps>
+                            {/* configuracion general */}
+                            {pasoActual === 2 && (() => {
+                                const datosBasicos = form?.getFieldsValue(true) || {};
+                                const nombreCategoria = catalogos?.categorias?.find(c => c.value === datosBasicos.categoria_id)?.label || '--';
+                                const nombreModalidad = catalogos?.modalidades?.find(m => m.value === datosBasicos.modalidad_id)?.label || '--';
+                                const nombreObjetivo = catalogos?.objetivos?.find(o => o.value === datosBasicos.objetivo_id)?.label || '--';
+
+                                // calculamos los puntos y tipos de actividades para el resumen lateral
+                                const secciones = diapositivasGeneradas.filter(item => item.isSeccion);
+                                const actividadesEvaluables = secciones.flatMap(sec => sec.actividades.filter(act => !act.config?.paginasExtras)).filter(esEvaluable);
+                                
+                                const calcularPuntosPorTipo = (tipo) => {
+                                    return actividadesEvaluables
+                                        .filter(act => act.tipo === tipo)
+                                        .reduce((suma, act) => suma + (Number(act.ponderacion) || 0), 0);
+                                };
+
+                                const puntosEntrega = calcularPuntosPorTipo('entregable');
+                                const puntosExamen = calcularPuntosPorTipo('examen');
+                                const puntosTotales = puntosEntrega + puntosExamen;
+                                const cursoListo = actividadesEvaluables.length === 0 || puntosTotales === 100;
+
+                                return (
+                                    <div style={{ marginTop: '24px', borderTop: '1px solid #f0f0f0', paddingTop: '18px' }}>
+                                        
+                                        {/* resumen del curso */}
+                                        <Space align="center" style={{ marginBottom: '16px' }}>
+                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end' }}>
+                                                <div style={{ width: '6px', height: '16px', background: '#E0720A', borderRadius: '2px' }} />
+                                                <div style={{ width: '6px', height: '22px', background: '#E0720A', borderRadius: '2px' }} />
+                                                <div style={{ width: '6px', height: '12px', background: '#E0720A', borderRadius: '2px' }} />
+                                            </div>
+                                            <Title level={5} style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#1a1a24' }}>
+                                                Resumen del curso
+                                            </Title>
+                                        </Space>
+
+                                        {/* ponderacion, ocultar igual cuando no haya actividades de ponderacion */}
+                                        {actividadesEvaluables.length > 0 ? (
+                                            <>
+                                                <div style={{ background: '#f6ffed', borderRadius: '12px', padding: '20px', textAlign: 'center', marginBottom: '20px', border: '1px solid #b7eb8f' }}>
+                                                    <Text type="secondary" style={{ fontSize: '13px', fontWeight: 600 }}>Ponderación total</Text>
+                                                    <div style={{ fontSize: '32px', fontWeight: 800, color: '#1a1a24', lineHeight: '1.2', margin: '4px 0' }}>{puntosTotales}%</div>
+                                                </div>
+
+                                                {/* Desglose de puntos */}
+                                                <Space direction="vertical" size="small" style={{ width: '100%', marginBottom: '32px' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                        <Space><div style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFC60C' }} /><Text style={{ fontSize: '13px', color: '#434343' }}>Actividades de entrega</Text></Space>
+                                                        <Text style={{ fontWeight: 700 }}>{puntosEntrega}%</Text>
+                                                    </div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                        <Space><div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00B4E3' }} /><Text style={{ fontSize: '13px', color: '#434343' }}>Exámenes</Text></Space>
+                                                        <Text style={{ fontWeight: 700 }}>{puntosExamen}%</Text>
+                                                    </div>
+                                                </Space>
+                                            </>
+                                        ) : (
+                                            /* mensaje de que es curso terorico */
+                                            <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '16px', textAlign: 'center', marginBottom: '24px', border: '1px #cbd5e1' }}>
+                                                <Text style={{ fontSize: '14px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Curso de contenido teórico</Text>
+                                                <Text type="secondary" style={{ fontSize: '12px' }}>Este curso no contiene actividades con puntaje.</Text>
+                                            </div>
+                                        )}
+
+
+
+                                        {/* configuracion general */}
+                                        <Space align="center" style={{ marginBottom: '16px' }}>
+                                            <SettingOutlined style={{ fontSize: '18px', color: '#1a1a24' }} />
+                                            <Title level={5} style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#1a1a24' }}>
+                                                Configuración general
+                                            </Title>
+                                        </Space>
+
+                                        {/* datos del curso */}
+                                        <Space direction="vertical" size="middle" style={{ width: '100%', marginBottom: '24px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <Space size="small">
+                                                    <LaptopOutlined style={{ color: '#595959', marginTop: '3px' }} />
+                                                    <Text type="secondary" style={{ fontSize: '13px' }}>Modalidad</Text>
+                                                </Space>
+                                                <Text style={{ fontWeight: 600, fontSize: '13px', color: '#1a1a24', textAlign: 'right', maxWidth: '55%' }}>
+                                                    {nombreModalidad}
+                                                </Text>
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <Space size="small">
+                                                    <ClockCircleOutlined style={{ color: '#595959', marginTop: '3px' }} />
+                                                    <Text type="secondary" style={{ fontSize: '13px' }}>Duración estimada</Text>
+                                                </Space>
+                                                <Text style={{ fontWeight: 600, fontSize: '13px', color: '#1a1a24', textAlign: 'right' }}>
+                                                    {datosBasicos.duracion || 0} h aprox.
+                                                </Text>
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <Space size="small">
+                                                    <FolderOutlined style={{ color: '#595959', marginTop: '3px' }} />
+                                                    <Text type="secondary" style={{ fontSize: '13px' }}>Categoría</Text>
+                                                </Space>
+                                                <Text style={{ fontWeight: 600, fontSize: '13px', color: '#1a1a24', textAlign: 'right', maxWidth: '55%' }}>
+                                                    {nombreCategoria}
+                                                </Text>
+                                            </div>
+
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <Space size="small">
+                                                    <AimOutlined style={{ color: '#595959', marginTop: '3px' }} />
+                                                    <Text type="secondary" style={{ fontSize: '13px' }}>Objetivo</Text>
+                                                </Space>
+                                                <Text style={{ fontWeight: 600, fontSize: '13px', color: '#1a1a24', textAlign: 'right', maxWidth: '60%' }}>
+                                                    {nombreObjetivo}
+                                                </Text>
+                                            </div>
+                                        </Space>
+                                        
+                                        {/* caja de validacion */}
+                                        {cursoListo && (
+                                            <div style={{ background: '#E4F4FA', borderRadius: '12px', padding: '16px', display: 'flex', gap: '12px' }}>
+                                                <CheckCircleFilled style={{ color: '#00B4E3', fontSize: '18px', marginTop: '2px' }} />
+                                                <div>
+                                                    <Text style={{ fontWeight: 700, display: 'block', marginBottom: '4px' }}>Todo está listo</Text>
+                                                    <Text type="secondary" style={{ fontSize: '12px', lineHeight: 1.4 }}>El curso cumple con todos los requisitos para ser publicado.</Text>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                             {/* mensaje/consejo generico */}
                             {pasoActual === 0 && (
-                                <div style={{ backgroundColor: '#e6f4ff', padding: '16px', borderRadius: 12, display: 'flex', gap: 12 }}>
-                                    <div style={{ background: '#1677ff', color: 'white', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <div style={{ backgroundColor: '#E4F4FA', padding: '16px', borderRadius: 12, display: 'flex', gap: 12 }}>
+                                    <div style={{ background: '#00B4E3', color: 'white', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                         <BulbOutlined />
                                     </div>
                                     <div>
-                                        <div style={{ color: '#003eb3', fontWeight: 700, marginBottom: 4, fontSize: 14 }}>Consejo</div>
-                                        <div style={{ color: '#434343', fontSize: 12, lineHeight: 1.5 }}>
-                                            Puedes guardar tu avance en cualquier momento y continuar más tarde. Todos los datos se mantienen seguros.
-                                        </div>
+                                        <Text style={{ fontWeight: 700, display: 'block', marginBottom: '4px' }}>Consejo</Text>
+                                        <Text type='secondary' style={{ fontSize: '12px', lineHeight: 1.4 }}>
+                                            Puedes guardar tu avance en cualquier momento y continuar más tarde. La configuración de curso se guardará.
+                                        </Text>
                                     </div>
                                 </div>
                             )}
@@ -361,7 +653,7 @@ export default function NuevoCursoPage() {
                             >
                                 <Title level={5} style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Tipos de actividad</Title>
                                 <Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 16 }}>
-                                    Puedes asignar un tipo de actividad a cada página de tu presentación o agregar actividades manuales.
+                                    Puedes asignar un tipo de actividad a cada página de tu presentación.
                                 </Text>
                                 
                                 <Space direction="vertical" style={{ width: '100%' }} size="middle">

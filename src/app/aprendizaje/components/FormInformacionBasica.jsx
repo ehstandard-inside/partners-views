@@ -1,19 +1,14 @@
 "use client";
 
 import React from 'react';
-import { Form, Input, InputNumber, Select, Upload, Space, Row, Col, Typography, Card, Button } from 'antd';
-import { VideoCameraOutlined, AimOutlined, FileImageOutlined, FormOutlined, FolderOutlined, LaptopOutlined, TagsOutlined, SolutionOutlined, ClockCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
-import ImgCrop from 'antd-img-crop';
+import { Form, Input, InputNumber, Select, Row, Col, Typography, Switch } from 'antd';
+import { AimOutlined, FormOutlined, FolderOutlined, LaptopOutlined, TagsOutlined, SolutionOutlined, ClockCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import InputImagen from './InputImagen';
+import { useState, useEffect } from 'react';
 const { Text, Title } = Typography;
-const { Option } = Select;
 
-export default function FormInformacionBasica({ form }) {
-    const simularSubida = ({ file, onSuccess }) => {
-        setTimeout(() => {
-            onSuccess("ok");
-        }, 0)
-    }
+export default function FormInformacionBasica({ form, catalogos, cargandoCatalogos }) {
+
     return (
         <Form
             form={form}
@@ -62,9 +57,9 @@ export default function FormInformacionBasica({ form }) {
                         <Select 
                             placeholder={<><FolderOutlined style={{ marginRight: '8px' }} /> Selecciona una categoría</>}
                             allowClear
+                            loading={cargandoCatalogos}
+                            options={catalogos.categorias}
                         >
-                            <Option value={1}>Seguridad Industrial</Option>
-                            <Option value={2}>Desarrollo Organizacional</Option>
                         </Select>
                     </Form.Item>
                 </Col>
@@ -80,9 +75,9 @@ export default function FormInformacionBasica({ form }) {
                         <Select
                             placeholder={<><LaptopOutlined style={{ marginRight: '8px' }} /> Selecciona una modalidad</>}
                             allowClear
+                            loading={cargandoCatalogos}
+                            options={catalogos.modalidades}
                         >
-                            <Option value={1}>En línea</Option>
-                            <Option value={2}>Presencial</Option>
                         </Select>
                     </Form.Item>
                 </Col>
@@ -97,9 +92,9 @@ export default function FormInformacionBasica({ form }) {
                         <Select
                             placeholder={<><AimOutlined style={{ marginRight: '8px' }} /> Selecciona una modalidad</>}
                             allowClear
+                            loading={cargandoCatalogos}
+                            options={catalogos.objetivos}
                         >
-                            <Option value={1}>Proporcionar información de nuevas tecnologías</Option>
-                            <Option value={2}>Incrementar la productividad laboral</Option>
                         </Select>
                     </Form.Item>
                 </Col>
@@ -115,9 +110,9 @@ export default function FormInformacionBasica({ form }) {
                         <Select
                             placeholder={<><TagsOutlined style={{ marginRight: '8px' }} /> Selecciona el área temática</>}
                             allowClear
+                            loading={cargandoCatalogos}
+                            options={catalogos.areas_tematicas}
                         >
-                            <Option value={1}>5405-Ambientales</Option>
-                            <Option value={2}>6400-Higiene y seguridad en el trabajo</Option>
                         </Select>
                     </Form.Item>
                 </Col>
@@ -132,9 +127,9 @@ export default function FormInformacionBasica({ form }) {
                         <Select
                             placeholder={<><SolutionOutlined style={{ marginRight: '8px' }} /> Selecciona el tipo de agente</>}
                             allowClear
+                            loading={cargandoCatalogos}
+                            options={catalogos.tipos_agente}
                         >
-                            <Option value={1}>Interno</Option>
-                            <Option value={2}>Externo</Option>
                         </Select>
                     </Form.Item>
                 </Col>
@@ -202,7 +197,7 @@ export default function FormInformacionBasica({ form }) {
                                 <div style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: 400 }}>Portada principal del curso. Formatos: JPG, PNG, WEBP (máx. 5 MB)</div>
                             </div>
                         }
-                        rules={[{ required: true, message: 'Campo obligatorio' }]}
+                        rules={[{ required: true, type: 'array', message: 'Campo obligatorio' }]}
                         style={{ margin: 0 }}
                     >
                         <InputImagen aspect={342 / 160} modalTitle="Recortar portada"/>
@@ -210,20 +205,48 @@ export default function FormInformacionBasica({ form }) {
                 </Col>
 
                 <Col xs={24} md={12}>
-                    {/* imagen de insignia */}
-                    <Form.Item
-                        name="insignia"
-                        label={
-                            <div>
-                                <div style={{ fontWeight: 600 }}>Insignia del curso <span style={{ color: '#ff4d4f' }}>*</span></div>
-                                <div style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: 400 }}>Insignia o distintivo del curso. Formatos: JPG, PNG, WEBP (máx. 2 MB)</div>
-                            </div>
-                        }
-                        rules={[{ required: true, message: 'Campo obligatorio' }]}
-                        style={{ margin: 0 }}
-                    >
-                        <InputImagen aspect={1} cropShape='round' modalTitle="Recortar insignia" />
-                    </Form.Item>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ display: 'flex', fontWeight: 600 }}>¿El curso incluye insignia? <span style={{ marginLeft: '4px', color: '#8c8c8c', fontWeight: 400 }}> (opcional)</span></span>
+                        <Form.Item
+                            name="incluirInsignia"
+                            valuePropName='checked'
+                            initialValue={false}
+                            noStyle
+                        >
+                            <Switch checkedChildren="Sí" unCheckedChildren="No" size='small' style={{ margin: 0 }} />
+                        </Form.Item>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {/* campo que del input de la imagen dependiendo del switch */}
+                        <Form.Item noStyle dependencies={['incluirInsignia']}>
+                            {({ getFieldValue }) => {
+                                const quiereInsignia = getFieldValue('incluirInsignia'); // aqui guardamos el valor actial, false o true
+
+                                if(!quiereInsignia) return null;
+
+                                return (
+                                    <Col style={{ paddingLeft: 0 }} >
+                                        <Form.Item
+                                            name="insignia"
+                                            preserve={false}
+                                            label={
+                                                <div>
+                                                    <div style={{ fontSize: '12px', color: '#8c8c8c', fontWeight: 400 }}>
+                                                        Insignia o distintivo del curso. Formatos: JPG, PNG, WEBP (máx. 2 MB)
+                                                    </div>
+                                                </div>
+                                            }
+                                            // la validacion solo aplica aqui porque este bloque entero solo existe si quiereInsignia === true
+                                            rules={[{ required: true, type: 'array', message: 'Campo obligatorio' }]}
+                                            style={{ margin: 0 }}
+                                        >
+                                            <InputImagen aspect={1} cropShape='round' modalTitle="Recortar insignia" />
+                                        </Form.Item>
+                                    </Col>
+                                );
+                            }}
+                        </Form.Item>
+                    </div>
                 </Col>
             </Row>
         </Form>
